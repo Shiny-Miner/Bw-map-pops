@@ -50,8 +50,8 @@ EWRAM_DATA u8 gPopupTaskId = 0;
 // Gen5 assets
 static const u8 sMapPopUpTilesPrimary_BW[] = INCBIN_U8("graphics/bw_primary.4bpp");
 static const u8 sMapPopUpTilesSecondary_BW[] = INCBIN_U8("graphics/bw_secondary.4bpp");
-static const u16 sMapPopUpTilesPalette_BW_Black[16] = INCBIN_U16("graphics/map_popup/bw/black.gbapal");
-static const u16 sMapPopUpTilesPalette_BW_White[16] = INCBIN_U16("graphics/map_popup/bw/white.gbapal");
+static const u16 sMapPopUpTilesPalette_BW_Black[16] = INCBIN_U16("graphics/black.gbapal");
+static const u16 sMapPopUpTilesPalette_BW_White[16] = INCBIN_U16("graphics/white.gbapal");
 #else
 static const u8 sMapPopUpTilesPrimary_BW[] = {0};
 static const u8 sMapPopUpTilesSecondary_BW[] = {0};
