@@ -28,8 +28,27 @@
 static EWRAM_DATA u8 sSecondaryPopupWindowId = 0;
 #endif
 
+static EWRAM_DATA u8 sStartMenuWindowId = 0;
+static EWRAM_DATA u8 sMapNamePopupWindowId = 0;
+static u16 AddWindowParameterized(u8, u8, u8, u8, u8, u8, u16);
+
 const u8 gText_AM[] = _("AM");
 const u8 gText_PM[] = _("PM");
+const u8 gText_Space[] = _(" ");
+
+static const struct WindowTemplate sStandardTextBox_WindowTemplates[] =
+{
+    {
+        .bg = 0,
+        .tilemapLeft = 2,
+        .tilemapTop = 15,
+        .width = 27,
+        .height = 4,
+        .paletteNum = 15,
+        .baseBlock = 0x194
+    },
+    DUMMY_WIN_TEMPLATE
+};
 
 bool8 IsWeatherAlphaBlend(void)
 {

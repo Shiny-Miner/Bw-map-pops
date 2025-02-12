@@ -136,3 +136,4 @@ GetMonSpritePalStructFromOtIdPersonality = 0x08044180|1;
 IndexOfSpritePaletteTag = 0x080089e8|1;
 PreservePaletteInWeather = 0x0807b084|1;
 CreateMonPicSprite_HandleDeoxys = 0x0810c1cc|1;
+
