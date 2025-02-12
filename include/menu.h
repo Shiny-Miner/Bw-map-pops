@@ -24,6 +24,8 @@ struct MenuAction
     } func;
 };
 
+extern EWRAM_DATA u8 gPopupTaskId;
+
 // menu2
 void AddTextPrinterParameterized3(u8 windowId, u8 fontId, u8 x, u8 y, const u8 * color, s8 speed, const u8 * str);
 void AddTextPrinterParameterized4(u8 windowId, u8 fontId, u8 x, u8 y, u8 letterSpacing, u8 lineSpacing, const u8 *color, s8 speed, const u8 *str);
@@ -60,6 +62,10 @@ u8 Menu_MoveCursorNoWrapAround(s8 cursorDelta);
 u8 Menu_MoveCursor(s8 cursorDelta);
 u8 Menu_InitCursor(u8 windowId, u8 fontId, u8 left, u8 top, u8 cursorHeight, u8 numChoices, u8 initialCursorPos);
 u8 Menu_InitCursorInternal(u8 windowId, u8 fontId, u8 left, u8 top, u8 cursorHeight, u8 numChoices, u8 initialCursorPos, bool8 APressMuted);
+u8 AddSecondaryPopUpWindow(void);
+u8 GetSecondaryPopUpWindowId(void);
+void RemoveSecondaryPopUpWindow(void);
+void HBlankCB_DoublePopupWindow(void);
 void TopBarWindowPrintTwoStrings(const u8 *string, const u8 *string2, bool8 fgColorChooser, u8 notUsed, bool8 copyToVram);
 void TopBarWindowPrintString(const u8 *string, u8 unUsed, bool8 copyToVram);
 void ClearTopBarWindow(void);
