@@ -2,6 +2,8 @@
 
 ![alt text](BW_map_pops-1.png)
 
+Join my server : https://discord.gg/zqphPZSzhn
+
 ## Credits to RHH/pokeemerald-expansion, Shiny Miner
 - Same build as you build Main-menu-BW, just run command 'make' in powershell.
 - If you're new, here are instructions to set up tools: https://github.com/Shiny-Miner/GBA-Binary-hacking-assets/wiki/Tutorial-:-Inserting-Shiny-Miner's-some-of-C-injctions
