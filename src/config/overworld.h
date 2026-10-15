@@ -1,6 +1,20 @@
 #ifndef GUARD_CONFIG_OVERWORLD_H
 #define GUARD_CONFIG_OVERWORLD_H
 
+// Generation constants (normally provided by pokeemerald-expansion's config/general.h)
+#ifndef GEN_3
+#define GEN_1 1
+#define GEN_2 2
+#define GEN_3 3
+#define GEN_4 4
+#define GEN_5 5
+#define GEN_6 6
+#define GEN_7 7
+#define GEN_8 8
+#define GEN_9 9
+#define GEN_LATEST GEN_9
+#endif
+
 // Movement config
 #define OW_RUNNING_INDOORS          GEN_LATEST  // In Gen4+, players are allowed to run indoors.
 
@@ -54,8 +68,8 @@
 #define BATTLE_PYRAMID_RANDOM_ENCOUNTERS    FALSE    // If set to TRUE, battle pyramid Pokemon will be generated randomly based on the round's challenge instead of hardcoded in src/data/battle_frontier/battle_pyramid_level_50_wild_mons.h (or open_level_wild_mons.h)
 
 // Map pop-up config
-#define OW_POPUP_GENERATION        GEN_3    // Different generations display location names in overworld pop-ups differently.
-                                            // Only choies are currently GEN_3 and GEN_5, all others will default to Gen3 pop-ups.
+#define OW_POPUP_GENERATION        GEN_5    // Different generations display location names in overworld pop-ups differently.
+                                            // FireRed port: only GEN_5 is implemented. For the vanilla FR popup, do not apply the hooks.
 
 // Gen5 map pop-up config
 // Constants

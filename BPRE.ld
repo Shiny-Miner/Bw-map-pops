@@ -137,3 +137,25 @@ IndexOfSpritePaletteTag = 0x080089e8|1;
 PreservePaletteInWeather = 0x0807b084|1;
 CreateMonPicSprite_HandleDeoxys = 0x0810c1cc|1;
 
+
+/* ---- BW map popup (map_name_popup.c) ---- */
+SetGpuRegBits = 0x08000af4|1;
+SetHBlankCallback = 0x08000700|1;
+EnableInterrupts = 0x08000b68|1;
+DisableInterrupts = 0x08000b94|1;
+CpuSet = 0x081e3b64|1;
+AddWindow = 0x08003ce4|1;
+RemoveWindow = 0x08003e3c|1;
+CopyWindowToVram = 0x08003f20|1;
+CopyToWindowPixelBuffer = 0x08004404|1;
+GetMapName = 0x080c4d78|1;
+FlagGet = 0x0806e6d0|1;
+FuncIsActiveTask = 0x08077650|1;
+FindTaskIdByFunc = 0x08077688|1;
+ClearStdWindowAndFrame = 0x080f6f9c|1;
+gMapHeader = 0x02036dfc;
+gPlttBufferFaded = 0x020375f8;
+gWeatherPtr = 0x083c2bbc; /* const pointer stored in ROM */
+
+/* Free EWRAM (same free area as gEvIv above) */
+gPopupTaskId = 0x0203FFE0;

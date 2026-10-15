@@ -1,180 +1,49 @@
+// BW-style map name pop-up for Pokemon FireRed (ROM hack build).
+//
+// Replaces the ROM's own ShowMapNamePopup / DismissMapNamePopup /
+// IsMapNamePopupTaskActive. See mainBPRE.asm for the hooks and BPRE.ld for
+// the ROM symbols / fixed RAM addresses used here.
 #include "global.h"
+#include "config/overworld.h"
 #include "bg.h"
 #include "event_data.h"
 #include "field_weather.h"
 #include "gpu_regs.h"
-#include "graphics.h"
-#include "international_string_util.h"
 #include "main.h"
-#include "menu.h"
 #include "map_name_popup.h"
+#include "menu.h"
+#include "new_menu_helpers.h"
 #include "palette.h"
 #include "region_map.h"
-#include "rtc.h"
-#include "start_menu.h"
 #include "string_util.h"
 #include "task.h"
 #include "text.h"
-#include "constants/layouts.h"
+#include "window.h"
+#include "characters.h"
 #include "constants/region_map_sections.h"
 #include "constants/weather.h"
-#include "config/overworld.h"
-#include "config.h"
 
-// enums
-enum MapPopUp_Themes
-{
-    MAPPOPUP_THEME_WOOD,
-    MAPPOPUP_THEME_MARBLE,
-    MAPPOPUP_THEME_STONE,
-    MAPPOPUP_THEME_BRICK,
-    MAPPOPUP_THEME_UNDERWATER,
-    MAPPOPUP_THEME_STONE2,
-};
+#if OW_POPUP_GENERATION != GEN_5
+#error "Only OW_POPUP_GENERATION == GEN_5 is implemented. For the vanilla FR popup, do not build/apply this patch."
+#endif
+
+#if OW_POPUP_BW_TIME_MODE != OW_POPUP_BW_TIME_NONE
+#error "FireRed has no RTC code, so the BW pop-up clock is not available. Set OW_POPUP_BW_TIME_MODE to OW_POPUP_BW_TIME_NONE."
+#endif
+
+// Gen5 assets (built by the Makefile from graphics/png_to_4bpp and graphics/pal_to_gbapal)
+static const u8 sMapPopUpTilesPrimary_BW[] = INCBIN_U8("graphics/png_to_4bpp/bw_primary.4bpp");
+static const u8 sMapPopUpTilesSecondary_BW[] = INCBIN_U8("graphics/png_to_4bpp/bw_secondary.4bpp");
+static const u16 sMapPopUpTilesPalette_BW_Black[16] = INCBIN_U16("graphics/pal_to_gbapal/black.gbapal");
+static const u16 sMapPopUpTilesPalette_BW_White[16] = INCBIN_U16("graphics/pal_to_gbapal/white.gbapal");
+
+// Text color indices inside the pop-up palettes: {background, foreground, shadow}
+static const u8 sBwTextColors[3] = {0, 2, 3};
 
 enum MapPopUp_Themes_BW
 {
     MAPPOPUP_THEME_BW_DEFAULT,
 };
-
-// static functions
-static void Task_MapNamePopUpWindow(u8 taskId);
-static void ShowMapNamePopUpWindow(void);
-static void LoadMapNamePopUpWindowBg(void);
-
-// EWRAM
-EWRAM_DATA u8 gPopupTaskId = 0;
-
-
-#if OW_POPUP_GENERATION == GEN_5
-// Gen5 assets
-static const u8 sMapPopUpTilesPrimary_BW[] = INCBIN_U8("graphics/bw_primary.4bpp");
-static const u8 sMapPopUpTilesSecondary_BW[] = INCBIN_U8("graphics/bw_secondary.4bpp");
-static const u16 sMapPopUpTilesPalette_BW_Black[16] = INCBIN_U16("graphics/black.gbapal");
-static const u16 sMapPopUpTilesPalette_BW_White[16] = INCBIN_U16("graphics/white.gbapal");
-#else
-static const u8 sMapPopUpTilesPrimary_BW[] = {0};
-static const u8 sMapPopUpTilesSecondary_BW[] = {0};
-static const u16 sMapPopUpTilesPalette_BW_Black[] = {0};
-static const u16 sMapPopUpTilesPalette_BW_White[] = {0};
-#endif
-
-static const u8 sRegionMapSectionId_To_PopUpThemeIdMapping_BW[] =
-{
-    [MAPSEC_LITTLEROOT_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_OLDALE_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_DEWFORD_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_LAVARIDGE_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_FALLARBOR_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_VERDANTURF_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_PACIFIDLOG_TOWN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_PETALBURG_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SLATEPORT_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MAUVILLE_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_RUSTBORO_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_FORTREE_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_LILYCOVE_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MOSSDEEP_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SOOTOPOLIS_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_EVER_GRANDE_CITY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_101] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_102] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_103] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_104] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_105] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_106] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_107] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_108] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_109] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_110] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_111] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_112] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_113] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_114] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_115] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_116] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_117] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_118] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_119] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_120] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_121] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_122] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_123] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_124] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_125] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_126] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_127] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_128] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_129] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_130] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_131] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_132] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_133] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ROUTE_134] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_124] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_126] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_127] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_128] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_SOOTOPOLIS] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_GRANITE_CAVE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MT_CHIMNEY] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SAFARI_ZONE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_BATTLE_FRONTIER] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_PETALBURG_WOODS] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_RUSTURF_TUNNEL] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ABANDONED_SHIP] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_NEW_MAUVILLE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_METEOR_FALLS] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_METEOR_FALLS2] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MT_PYRE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_AQUA_HIDEOUT_OLD] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SHOAL_CAVE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SEAFLOOR_CAVERN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_SEAFLOOR_CAVERN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_VICTORY_ROAD] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MIRAGE_ISLAND] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_CAVE_OF_ORIGIN] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SOUTHERN_ISLAND] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_FIERY_PATH] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_FIERY_PATH2] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_JAGGED_PASS] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_JAGGED_PASS2] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SEALED_CHAMBER] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_SEALED_CHAMBER] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SCORCHED_SLAB] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ISLAND_CAVE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_DESERT_RUINS] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ANCIENT_TOMB] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_INSIDE_OF_TRUCK] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SKY_PILLAR] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_SECRET_BASE] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_DYNAMIC] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_AQUA_HIDEOUT - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MAGMA_HIDEOUT - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MIRAGE_TOWER - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_BIRTH_ISLAND - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_FARAWAY_ISLAND - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ARTISAN_CAVE - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_MARINE_CAVE - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_MARINE_CAVE - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_TERRA_CAVE - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_105 - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_125 - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_UNDERWATER_129 - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_DESERT_UNDERPASS - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_ALTERING_CAVE - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_NAVEL_ROCK - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-    [MAPSEC_TRAINER_HILL - KANTO_MAPSEC_COUNT] = MAPPOPUP_THEME_BW_DEFAULT,
-};
-
-
-
-static bool8 UNUSED StartMenu_ShowMapNamePopup(void)
-{
-    HideStartMenu();
-    ShowMapNamePopup();
-    return TRUE;
-}
 
 // States and data defines for Task_MapNamePopUpWindow
 enum {
@@ -187,47 +56,134 @@ enum {
     STATE_PRINT, // For some reason the first state is numerically last.
 };
 
-#define POPUP_OFFSCREEN_Y  ((OW_POPUP_GENERATION == GEN_5) ? 24 : 40)
+#define POPUP_OFFSCREEN_Y  24
 #define POPUP_SLIDE_SPEED  2
 
 #define tState         data[0]
 #define tOnscreenTimer data[1]
-#define tYOffset       data[2]
+#define tYOffset       data[2] // read by HBlankCB_DoublePopupWindow
 #define tIncomingPopUp data[3]
 #define tPrintTimer    data[4]
+#define tWindowId      data[5]
+#define tWindow2Id     data[6]
 
-void ShowMapNamePopup(void)
+// gPopupTaskId (menu.h) is a free EWRAM byte whose address is defined in BPRE.ld;
+// normal EWRAM_DATA/.bss variables can't be used in this build.
+
+static void Task_MapNamePopUpWindow(u8 taskId);
+static void ShowMapNamePopUpWindow(u8 taskId, bool32 palIntoFadedBuffer);
+static void HideMapNamePopUpWindow(u8 taskId);
+
+bool8 IsWeatherAlphaBlend(void)
 {
-    if (FlagGet(FLAG_HIDE_MAP_NAME_POPUP) != TRUE)
+    return (gWeatherPtr->currWeather == WEATHER_FOG_HORIZONTAL)
+        || (gWeatherPtr->currWeather == WEATHER_FOG_DIAGONAL)
+        || (gWeatherPtr->currWeather == WEATHER_UNDERWATER_BUBBLES)
+        || (gWeatherPtr->currWeather == WEATHER_UNDERWATER);
+}
+
+static u8 AddPopUpWindow(u8 tilemapTop, u16 baseBlock)
+{
+    struct WindowTemplate template =
     {
-        if (!FuncIsActiveTask(Task_MapNamePopUpWindow))
-        {
-            // New pop up window
-            if (OW_POPUP_GENERATION == GEN_5)
-            {
-                gPopupTaskId = CreateTask(Task_MapNamePopUpWindow, 100);
+        .bg = 0,
+        .tilemapLeft = 0,
+        .tilemapTop = tilemapTop,
+        .width = 30,
+        .height = 3,
+        .paletteNum = 14,
+        .baseBlock = baseBlock,
+    };
+    return AddWindow(&template);
+}
 
-                if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
-                    SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG0 | BLDCNT_TGT2_ALL | BLDCNT_EFFECT_BLEND);
-            }
-            else
-            {
-                gPopupTaskId = CreateTask(Task_MapNamePopUpWindow, 90);
-                SetGpuReg(REG_OFFSET_BG0VOFS, POPUP_OFFSCREEN_Y);
-            }
+static void HBlankCB_DoublePopupWindow(void)
+{
+    u16 offset = gTasks[gPopupTaskId].tYOffset;
+    u16 scanline = REG_VCOUNT;
 
-            gTasks[gPopupTaskId].tState = STATE_PRINT;
-            gTasks[gPopupTaskId].tYOffset = POPUP_OFFSCREEN_Y;
-        }
-        else
-        {
-            // There's already a pop up window running.
-            // Hurry the old pop up offscreen so the new one can appear.
-            if (gTasks[gPopupTaskId].tState != STATE_SLIDE_OUT)
-                gTasks[gPopupTaskId].tState = STATE_SLIDE_OUT;
-            gTasks[gPopupTaskId].tIncomingPopUp = TRUE;
-        }
+    if (scanline < 80 || scanline > 160)
+    {
+        REG_BG0VOFS = offset;
+        if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
+            REG_BLDALPHA = BLDALPHA_BLEND(15, 5);
     }
+    else
+    {
+        REG_BG0VOFS = 512 - offset;
+    }
+}
+
+// Same logic as the ROM's floor suffix ("B1F", "2F" ...).
+static u8 *AppendFloorNum(u8 *dest, s8 floorNum)
+{
+    if (floorNum == 0 || floorNum == 127)
+        return dest;
+    *dest++ = CHAR_SPACE;
+    if (floorNum < 0)
+    {
+        *dest++ = CHAR_B;
+        floorNum = -floorNum;
+    }
+    dest = ConvertIntToDecimalStringN(dest, floorNum, STR_CONV_MODE_LEFT_ALIGN, 2);
+    *dest++ = CHAR_F;
+    *dest = EOS;
+    return dest;
+}
+
+void ShowMapNamePopup(bool32 palIntoFadedBuffer)
+{
+    u8 taskId;
+
+    if (FlagGet(FLAG_DONT_SHOW_MAP_NAME_POPUP) == TRUE)
+        return;
+
+    if (!FuncIsActiveTask(Task_MapNamePopUpWindow))
+    {
+        // New pop up window
+        taskId = CreateTask(Task_MapNamePopUpWindow, 100);
+        gPopupTaskId = taskId;
+
+        if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
+            SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG0 | BLDCNT_TGT2_ALL | BLDCNT_EFFECT_BLEND);
+
+        gTasks[taskId].tState = STATE_PRINT;
+        gTasks[taskId].tOnscreenTimer = 0;
+        gTasks[taskId].tYOffset = POPUP_OFFSCREEN_Y;
+        gTasks[taskId].tIncomingPopUp = FALSE;
+        gTasks[taskId].tPrintTimer = 0;
+        gTasks[taskId].tWindowId = WINDOW_NONE;
+        gTasks[taskId].tWindow2Id = WINDOW_NONE;
+    }
+    else
+    {
+        // There's already a pop up window running.
+        // Hurry the old pop up offscreen so the new one can appear.
+        taskId = gPopupTaskId;
+        if (gTasks[taskId].tState != STATE_SLIDE_OUT)
+            gTasks[taskId].tState = STATE_SLIDE_OUT;
+        gTasks[taskId].tIncomingPopUp = TRUE;
+    }
+    // Faded-buffer flag is only needed when the window is built; remember it.
+    gTasks[taskId].data[7] = palIntoFadedBuffer;
+}
+
+void DismissMapNamePopup(void)
+{
+    u8 taskId = FindTaskIdByFunc(Task_MapNamePopUpWindow);
+
+    if (taskId == TASK_NONE)
+        return;
+    if (gTasks[taskId].tState == STATE_PRINT)
+        HideMapNamePopUpWindow(taskId);       // nothing on screen yet
+    else if (gTasks[taskId].tState < STATE_SLIDE_OUT)
+        gTasks[taskId].tState = STATE_SLIDE_OUT;
+    gTasks[taskId].tIncomingPopUp = FALSE;
+}
+
+bool8 IsMapNamePopupTaskActive(void)
+{
+    return FuncIsActiveTask(Task_MapNamePopUpWindow);
 }
 
 static void Task_MapNamePopUpWindow(u8 taskId)
@@ -242,26 +198,21 @@ static void Task_MapNamePopUpWindow(u8 taskId)
         {
             task->tState = STATE_SLIDE_IN;
             task->tPrintTimer = 0;
-            ShowMapNamePopUpWindow();
-            if (OW_POPUP_GENERATION == GEN_5)
-            {
-                EnableInterrupts(INTR_FLAG_HBLANK);
-                SetHBlankCallback(HBlankCB_DoublePopupWindow);
-            }
+            ShowMapNamePopUpWindow(taskId, task->data[7]);
+            EnableInterrupts(INTR_FLAG_HBLANK);
+            SetHBlankCallback(HBlankCB_DoublePopupWindow);
         }
         break;
     case STATE_SLIDE_IN:
-        // Slide the window onscreen.
         task->tYOffset -= POPUP_SLIDE_SPEED;
-        if (task->tYOffset <= 0 )
+        if (task->tYOffset <= 0)
         {
             task->tYOffset = 0;
             task->tState = STATE_WAIT;
-            gTasks[gPopupTaskId].data[1] = 0;
+            task->tOnscreenTimer = 0;
         }
         break;
     case STATE_WAIT:
-        // Wait while the window is fully onscreen.
         if (++task->tOnscreenTimer > 120)
         {
             task->tOnscreenTimer = 0;
@@ -269,15 +220,13 @@ static void Task_MapNamePopUpWindow(u8 taskId)
         }
         break;
     case STATE_SLIDE_OUT:
-        // Slide the window offscreen.
         task->tYOffset += POPUP_SLIDE_SPEED;
         if (task->tYOffset >= POPUP_OFFSCREEN_Y)
         {
             task->tYOffset = POPUP_OFFSCREEN_Y;
             if (task->tIncomingPopUp)
             {
-                // A new pop up window is incoming,
-                // return to the first state to show it.
+                // A new pop up window is incoming, return to the first state to show it.
                 task->tState = STATE_PRINT;
                 task->tPrintTimer = 0;
                 task->tIncomingPopUp = FALSE;
@@ -285,189 +234,93 @@ static void Task_MapNamePopUpWindow(u8 taskId)
             else
             {
                 task->tState = STATE_ERASE;
-                return;
             }
         }
         break;
     case STATE_ERASE:
-        ClearStdWindowAndFrame(GetMapNamePopUpWindowId(), TRUE);
-        if (OW_POPUP_GENERATION == GEN_5)
-            ClearStdWindowAndFrame(GetSecondaryPopUpWindowId(), TRUE);
+        if (task->tWindowId != WINDOW_NONE)
+            ClearStdWindowAndFrame(task->tWindowId, TRUE);
+        if (task->tWindow2Id != WINDOW_NONE)
+            ClearStdWindowAndFrame(task->tWindow2Id, TRUE);
         task->tState = STATE_END;
         break;
     case STATE_END:
-        HideMapNamePopUpWindow();
-        return;
-    }
-if (OW_POPUP_GENERATION != GEN_5)
-    SetGpuReg(REG_OFFSET_BG0VOFS, task->tYOffset);
-}
-
-void HideMapNamePopUpWindow(void)
-{
-    if (FuncIsActiveTask(Task_MapNamePopUpWindow))
-    {
-    #ifdef UBFIX
-        if (GetMapNamePopUpWindowId() != WINDOW_NONE)
-    #endif // UBFIX
-        {
-            ClearStdWindowAndFrame(GetMapNamePopUpWindowId(), TRUE);
-            RemoveMapNamePopUpWindow();
-        }
-
-        if (OW_POPUP_GENERATION == GEN_5)
-        {
-            if (GetSecondaryPopUpWindowId() != WINDOW_NONE)
-            {
-                ClearStdWindowAndFrame(GetSecondaryPopUpWindowId(), TRUE);
-                RemoveSecondaryPopUpWindow();
-            }
-
-            DisableInterrupts(INTR_FLAG_HBLANK);
-            SetHBlankCallback(NULL);
-
-            if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
-            {
-                SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_BG_ALL | WININ_WIN0_OBJ | WININ_WIN1_BG_ALL | WININ_WIN1_OBJ);
-                SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT2_BG1 | BLDCNT_TGT2_BG2 | BLDCNT_TGT2_BG3 | BLDCNT_TGT2_OBJ | BLDCNT_EFFECT_BLEND);
-                SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(8, 10));
-            }
-        }
-
-        SetGpuReg_ForcedBlank(REG_OFFSET_BG0VOFS, 0);
-        DestroyTask(gPopupTaskId);
+        HideMapNamePopUpWindow(taskId);
+        break;
     }
 }
 
-static void ShowMapNamePopUpWindow(void)
+static void HideMapNamePopUpWindow(u8 taskId)
 {
-    u8 mapDisplayHeader[24];
-    u8 *withoutPrefixPtr;
-    u8 x;
-    const u8 *mapDisplayHeaderSource;
-    u8 mapNamePopUpWindowId, secondaryPopUpWindowId;
+    struct Task *task = &gTasks[taskId];
 
-    if (OW_POPUP_GENERATION == GEN_5)
+    if (task->tWindowId != WINDOW_NONE)
     {
-        if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
-            SetGpuRegBits(REG_OFFSET_WININ, WININ_WIN0_CLR);
-
-        mapNamePopUpWindowId = AddMapNamePopUpWindow();
-        secondaryPopUpWindowId = AddSecondaryPopUpWindow();
+        ClearStdWindowAndFrame(task->tWindowId, TRUE);
+        RemoveWindow(task->tWindowId);
+        task->tWindowId = WINDOW_NONE;
     }
+    if (task->tWindow2Id != WINDOW_NONE)
+    {
+        ClearStdWindowAndFrame(task->tWindow2Id, TRUE);
+        RemoveWindow(task->tWindow2Id);
+        task->tWindow2Id = WINDOW_NONE;
+    }
+
+    DisableInterrupts(INTR_FLAG_HBLANK);
+    SetHBlankCallback(NULL);
+
+    if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
+    {
+        SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_BG_ALL | WININ_WIN0_OBJ | WININ_WIN1_BG_ALL | WININ_WIN1_OBJ);
+        SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT2_BG1 | BLDCNT_TGT2_BG2 | BLDCNT_TGT2_BG3 | BLDCNT_TGT2_OBJ | BLDCNT_EFFECT_BLEND);
+        SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(8, 10));
+    }
+
+    SetGpuReg(REG_OFFSET_BG0VOFS, 0);
+    DestroyTask(taskId);
+}
+
+static void ShowMapNamePopUpWindow(u8 taskId, bool32 palIntoFadedBuffer)
+{
+    struct Task *task = &gTasks[taskId];
+    u8 mapName[32];
+    const u16 *palette;
+    u8 windowId, window2Id;
+
+    if (OW_POPUP_BW_ALPHA_BLEND && !IsWeatherAlphaBlend())
+        SetGpuRegBits(REG_OFFSET_WININ, WININ_WIN0_CLR);
+
+    // Reuse the windows if a previous pop up is being replaced.
+    if (task->tWindowId == WINDOW_NONE)
+        task->tWindowId = AddPopUpWindow(0, 0x107);
+    if (task->tWindow2Id == WINDOW_NONE)
+        task->tWindow2Id = AddPopUpWindow(17, 0x161);
+    windowId = task->tWindowId;
+    window2Id = task->tWindow2Id;
+
+    // Background / frame (single BW theme for every map section)
+    switch (MAPPOPUP_THEME_BW_DEFAULT)
+    {
+    default:
+        palette = (OW_POPUP_BW_COLOR == OW_POPUP_BW_COLOR_WHITE) ? sMapPopUpTilesPalette_BW_White
+                                                                  : sMapPopUpTilesPalette_BW_Black;
+        break;
+    }
+    if (palIntoFadedBuffer)
+        CpuCopy16(palette, &gPlttBufferFaded[BG_PLTT_ID(14)], PLTT_SIZE_4BPP);
     else
-    {
-        AddMapNamePopUpWindow();
-    }
+        LoadPalette(palette, BG_PLTT_ID(14), PLTT_SIZE_4BPP);
 
-    LoadMapNamePopUpWindowBg();
+    CopyToWindowPixelBuffer(windowId, sMapPopUpTilesPrimary_BW, sizeof(sMapPopUpTilesPrimary_BW), 0);
+    CopyToWindowPixelBuffer(window2Id, sMapPopUpTilesSecondary_BW, sizeof(sMapPopUpTilesSecondary_BW), 0);
+    PutWindowTilemap(windowId);
+    PutWindowTilemap(window2Id);
 
-    mapDisplayHeader[0] = EXT_CTRL_CODE_BEGIN;
-    mapDisplayHeader[1] = EXT_CTRL_CODE_HIGHLIGHT;
-    mapDisplayHeader[2] = TEXT_COLOR_TRANSPARENT;
+    // Map name
+    AppendFloorNum(GetMapName(mapName, gMapHeader.regionMapSectionId, 0), gMapHeader.floorNum);
+    AddTextPrinterParameterized3(windowId, FONT_NORMAL, 8, 2, sBwTextColors, TEXT_SKIP_DRAW, mapName);
 
-    if (OW_POPUP_GENERATION == GEN_5)
-    {
-        AddTextPrinterParameterized(mapNamePopUpWindowId, FONT_SHORT, mapDisplayHeader, 8, 2, TEXT_SKIP_DRAW, NULL);
-        
-        if (OW_POPUP_BW_TIME_MODE != OW_POPUP_BW_TIME_NONE)
-        {
-            RtcCalcLocalTime();
-            FormatDecimalTimeWithoutSeconds(withoutPrefixPtr, gLocalTime.hours, gLocalTime.minutes, OW_POPUP_BW_TIME_MODE == OW_POPUP_BW_TIME_24_HR);
-            AddTextPrinterParameterized(secondaryPopUpWindowId, FONT_SMALL, mapDisplayHeader, GetStringRightAlignXOffset(FONT_SMALL, mapDisplayHeader, DISPLAY_WIDTH) - 5, 8, TEXT_SKIP_DRAW, NULL);
-        }
-
-        CopyWindowToVram(mapNamePopUpWindowId, COPYWIN_FULL);
-        CopyWindowToVram(secondaryPopUpWindowId, COPYWIN_FULL);
-    }
-    else
-    {
-        x = GetStringCenterAlignXOffset(FONT_NARROW, withoutPrefixPtr, 80);
-        AddTextPrinterParameterized(GetMapNamePopUpWindowId(), FONT_NARROW, mapDisplayHeader, x, 3, TEXT_SKIP_DRAW, NULL);
-        CopyWindowToVram(GetMapNamePopUpWindowId(), COPYWIN_FULL);
-    }
-}
-
-#define TILE_TOP_EDGE_START 0x21D
-#define TILE_TOP_EDGE_END   0x228
-#define TILE_LEFT_EDGE_TOP  0x229
-#define TILE_RIGHT_EDGE_TOP 0x22A
-#define TILE_LEFT_EDGE_MID  0x22B
-#define TILE_RIGHT_EDGE_MID 0x22C
-#define TILE_LEFT_EDGE_BOT  0x22D
-#define TILE_RIGHT_EDGE_BOT 0x22E
-#define TILE_BOT_EDGE_START 0x22F
-#define TILE_BOT_EDGE_END   0x23A
-
-static void DrawMapNamePopUpFrame(u8 bg, u8 x, u8 y, u8 deltaX, u8 deltaY, u8 unused)
-{
-    s32 i;
-
-    // Draw top edge
-    for (i = 0; i < 1 + TILE_TOP_EDGE_END - TILE_TOP_EDGE_START; i++)
-        FillBgTilemapBufferRect(bg, TILE_TOP_EDGE_START + i, i - 1 + x, y - 1, 1, 1, 14);
-
-    // Draw sides
-    FillBgTilemapBufferRect(bg, TILE_LEFT_EDGE_TOP,       x - 1,     y, 1, 1, 14);
-    FillBgTilemapBufferRect(bg, TILE_RIGHT_EDGE_TOP, deltaX + x,     y, 1, 1, 14);
-    FillBgTilemapBufferRect(bg, TILE_LEFT_EDGE_MID,       x - 1, y + 1, 1, 1, 14);
-    FillBgTilemapBufferRect(bg, TILE_RIGHT_EDGE_MID, deltaX + x, y + 1, 1, 1, 14);
-    FillBgTilemapBufferRect(bg, TILE_LEFT_EDGE_BOT,       x - 1, y + 2, 1, 1, 14);
-    FillBgTilemapBufferRect(bg, TILE_RIGHT_EDGE_BOT, deltaX + x, y + 2, 1, 1, 14);
-
-    // Draw bottom edge
-    for (i = 0; i < 1 + TILE_BOT_EDGE_END - TILE_BOT_EDGE_START; i++)
-        FillBgTilemapBufferRect(bg, TILE_BOT_EDGE_START + i, i - 1 + x, y + deltaY, 1, 1, 14);
-}
-
-static void LoadMapNamePopUpWindowBg(void)
-{
-    u8 popUpThemeId;
-    u8 popupWindowId = GetMapNamePopUpWindowId();
-    u16 regionMapSectionId = gMapHeader.regionMapSectionId;
-    u8 secondaryPopUpWindowId;
-
-    if (OW_POPUP_GENERATION == GEN_5)
-        secondaryPopUpWindowId = GetSecondaryPopUpWindowId();
-
-    if (regionMapSectionId >= KANTO_MAPSEC_START)
-    {
-        if (regionMapSectionId > KANTO_MAPSEC_END)
-            regionMapSectionId -= KANTO_MAPSEC_COUNT;
-        else
-            regionMapSectionId = 0; // Discard kanto region sections;
-    }
-
-    if (OW_POPUP_GENERATION == GEN_5)
-    {
-        popUpThemeId = sRegionMapSectionId_To_PopUpThemeIdMapping_BW[regionMapSectionId];
-        switch (popUpThemeId) 
-        {
-            // add additional gen 5-style pop-up themes as cases here
-            case MAPPOPUP_THEME_BW_DEFAULT:
-                if (OW_POPUP_BW_COLOR == OW_POPUP_BW_COLOR_WHITE)
-                    LoadPalette(sMapPopUpTilesPalette_BW_White, BG_PLTT_ID(14), sizeof(sMapPopUpTilesPalette_BW_White));
-                else
-                    LoadPalette(sMapPopUpTilesPalette_BW_Black, BG_PLTT_ID(14), sizeof(sMapPopUpTilesPalette_BW_Black));
-
-                CopyToWindowPixelBuffer(popupWindowId, sMapPopUpTilesPrimary_BW, sizeof(sMapPopUpTilesPrimary_BW), 0);
-                CopyToWindowPixelBuffer(secondaryPopUpWindowId, sMapPopUpTilesSecondary_BW, sizeof(sMapPopUpTilesSecondary_BW), 0);
-                break;
-        }
-
-        PutWindowTilemap(popupWindowId);
-        PutWindowTilemap(secondaryPopUpWindowId);
-    }
-    else
-    {
-        popUpThemeId = sRegionMapSectionId_To_PopUpThemeIdMapping[regionMapSectionId];
-        LoadBgTiles(GetWindowAttribute(popupWindowId, WINDOW_BG), sMapPopUp_OutlineTable[popUpThemeId], 0x400, 0x21D);
-        CallWindowFunction(popupWindowId, DrawMapNamePopUpFrame);
-        PutWindowTilemap(popupWindowId);
-        if (gMapHeader.weather == WEATHER_UNDERWATER_BUBBLES)
-            LoadPalette(&sMapPopUp_Palette_Underwater, BG_PLTT_ID(14), sizeof(sMapPopUp_Palette_Underwater));
-        else
-            LoadPalette(sMapPopUp_PaletteTable[popUpThemeId], BG_PLTT_ID(14), sizeof(sMapPopUp_PaletteTable[0]));
-        BlitBitmapToWindow(popupWindowId, sMapPopUp_Table[popUpThemeId], 0, 0, 80, 24);
-    }
+    CopyWindowToVram(windowId, COPYWIN_FULL);
+    CopyWindowToVram(window2Id, COPYWIN_FULL);
 }

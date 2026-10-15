@@ -5,5 +5,6 @@
 
 void ShowMapNamePopup(bool32 palIntoFadedBuffer);
 void DismissMapNamePopup(void);
+bool8 IsMapNamePopupTaskActive(void);
 
 #endif //GUARD_MAP_NAME_POPUP_H
